@@ -1,0 +1,54 @@
+# Configuration file for Capacitance Landau Fan in MLG.
+# Top Gate fixed
+
+file:
+  data_dir: EMS015
+  file_name: EMS15_Cpen_1_3KBperp
+  comment: Cpen
+
+measurement:
+  label: Cpen
+  v1: V_sample [V]
+  v2: B_field [T]
+  ch1: 0
+  read1: 0
+  read2: 1
+  fixed: vt
+
+lockin_settings:
+  tc: 1e-3
+  acgain: 14
+  sensitiviy: 5.0e-3
+
+balancing_settings:
+  balance_tc: 0.10
+  n0: -1.0
+  tolerance: 10.0
+  ref_ch: 2
+  offset:
+    - -0.0
+  iter: 2
+  tc: 18
+  rebalance : False
+
+axbox_settings:
+  chX1: 1.0
+  chX2: 1.0
+  chY1: 1.0
+  chY2: 1.0
+  frequency: 87777.77
+  ref_atten: 40
+  sample_atten: 50
+
+meas_parameters:
+  no_pnts: 1000
+  b_pnts: 1000
+  n0_rng:
+    - -5
+    - 5
+  b_rng:
+    - -6
+    - 6
+  scale: False
+  zOffset: 0.054
+  scalefactor: 1.5/2.0

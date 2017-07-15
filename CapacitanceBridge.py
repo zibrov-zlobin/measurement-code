@@ -2,7 +2,7 @@
 import numpy as np
 import time
 '''
-capacitance balancing bridge
+capacitance balancing bridge. supporting sr7280 and sr830
 '''
 
 class LinearBalancingBridge(object):

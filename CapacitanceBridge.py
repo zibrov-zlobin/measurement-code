@@ -13,6 +13,7 @@ class LinearBalancingBridge(object):
                 iterations=None):
         """
         initialize balancing bridge object with two input and two output values
+        -
         """
         self.s1 = s_in1
         self.s2 = s_in2

@@ -1,119 +1,24 @@
+'''
+[info]
+version = 2.0
+'''
+
+import time
+import math
 import numpy as np
 import labrad
 import labrad.units as U
-import time
-import math
-from CapacitanceBridge import CapacitanceBridge
+import CapacitanceBridge
+import yaml
 
 # TODO: make a gui.
 
-data_dir = "SZ11"
-file_name = "Csym_10T"
-comment = "Csym, 100 mV bias"
-
-Cpen = {'v1': 'V_tg [V]', 'ch1': '1',
-        'v2': 'V_sample [V]', 'ch2': '0',
-        'read1': '0',
-        'read2': '1',
-        'fixed': 'vb'
-
-        }
-
-Csym = {'v1': 'V_tg [V]', 'ch1': '1',
-        'v2': 'V_bg [V]', 'ch2': '0',
-        'read1': '0',
-        'read2': '1',
-        'fixed': 'vs'
-        }
-
-measurement = Csym
-
-lockin_settings = {'tc': 0.02,
-                   'acgain': 6,
-                   'sensitivity': 1e-3
-                   }
-
-balancing_settings = {'balance_tc': 0.05,
-                      'n0': 0.5,
-                      'p0': 0,
-                      'tolerance': 500.0,
-                      'ref_ch': 2  # Y2
-                      }
-
-acbox_settings = {'chX1': 1.0,
-                  'chX2': 1.0,
-                  'chY1': 0.75,
-                  'chY2': 0.75,
-                  'frequency': 67732.77,
-                  'ref_atten': 23,
-                  'sample_atten': 30
-                  }
-
-nhmfl_env = {'bfield': 0,
-             'brate': 0,
-             't_cernox': 0.340,
-             't_ruox': 0.00
-             }
-
-x2amp = {'ch1 offset': -0.0024784313,
-         'ch1 scale': 0.9999789608,
-         'ch2 offset': -0.0043156862,
-         'ch2 scale': 0.99986735604}
-
-# x2amp = {'ch1 offset': -0.0008,
-#          'ch1 scale': 2.0008,
-#          'ch2 offset': -0.0065,
-#          'ch2 scale': 2.0004}
-
-var_pxsize = np.array([(200, 100)])
-var_extent = np.array([(-2-0.6, 2-0.6, -2-1, 2-1)])  # -5.3, -4.55)
-
-
-delta_var = 0.0575
-offbal = (-0.0, 0.0)
-scale = 1.0
-brate = nhmfl_env['brate']  # T/min
-b0 = nhmfl_env['bfield']
-
-ch1_scale = x2amp['ch1 scale']
-ch1_offset = x2amp['ch1 offset']
-ch2_scale = x2amp['ch2 scale']
-ch2_offset = x2amp['ch2 offset']
-
-
-tau = lockin_settings['tc']
-gaindB = lockin_settings['acgain']
-sens = lockin_settings['sensitivity']
-DELAY_MEAS = 3 * tau * 1e6  # delay between changing dc voltages
-
-balance_tc = balancing_settings['balance_tc']
-REF_CHN = "Y" + str(balancing_settings['ref_ch'])
-tol = balancing_settings['tolerance'] * U.uV
-
-nbal = balancing_settings['n0']
-dbal = balancing_settings['p0']
-
-sample_attendB = acbox_settings['sample_atten']
-ref_attendB = acbox_settings['ref_atten']
-ac_freq = acbox_settings['frequency']
-
-vs_scale = 10 ** (-sample_attendB / 20.0) * 250.0 * U.mV  #
-refsc = 10 ** (-ref_attendB / 20.0) * 250.0 * U.mV
-ratio = refsc / vs_scale
-
-var_name1 = measurement['v1']
-var_name2 = measurement['v2']
-var_ch1 = measurement['ch1']
-var_ch2 = measurement['ch2']
-read_ch1 = measurement['read1']  # x ch
-read_ch2 = measurement['read2']  # y ch
-
 RAMP_SPEED = 5.0  # volts per sec
 RAMP_WAIT = 0.000  # seconds
-X_MAX = 16.0
-X_MIN = -16.0
-Y_MAX = 16.0
-Y_MIN = -16.0
+X_MAX = 6.0
+X_MIN = -6.0
+Y_MAX = 4.0
+Y_MIN = -5.0
 ADC_CONVERSIONTIME = 250
 ADC_AVGSIZE = 1
 
@@ -125,7 +30,8 @@ s2 = np.array((-0.5, -0.5)).reshape(2, 1)
 magnet_query_time = 5.0
 
 
-
+offbal = (-0.0, 0.0)
+scale = 1.0
 
 def vb_fixed(p0, n0, delta, vb):
     """
@@ -175,6 +81,39 @@ def function_select(s):
         f = vs_fixed
     return f
 
+def lockin_select(cxn, s):
+    if s == 'SR830':
+        return cxn.sr830
+    elif s == '7820':
+        return cxn.amatek_7280_lock_in_amplifier
+
+def init_acbox(acbox, stngs):
+    vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0 * U.mV
+    refsc = 10**(-stngs['ref_atten']/20.0) * 250.0 * U.mV
+    ac_scale = (refsc / vs_scale)/float(stngs['chY1'])
+    acbox.select_device()
+    acbox.initialize(15)
+    acbox.set_voltage("X1", stngs['chX1'])
+    acbox.set_voltage("X2", stngs['chX1'])
+    acbox.set_voltage("Y1", stngs['chY1'])
+    acbox.set_voltage("Y2", stngs['chY2'])
+    acbox.set_frequency(stngs['frequency'])
+    time.sleep(1)
+    return ac_scale
+
+def init_bridge(lck, acbox, cfg):
+    if cfg['lockin'] == 'SR830':
+        bridge = CapacitanceBridge.CapacitanceBridgeSR830Lockin
+    elif cfg['lockin'] == '7820':
+        bridge = CapacitanceBridge.CapacitanceBridge7280Lockin
+
+    stngs = cfg['balancing_settings']
+    ref_ch = "Y"+str(stngs['ref_ch'])
+    cb = bridge(lck=lck, acbox=acbox, time_const=stngs['balance_tc'],
+                           iterations=stngs['iter'], tolerance=stngs['tolerance'],
+                           s_in1=s1, s_in2=s2, excitation_channel=ref_ch)
+
+    return cb
 
 def dac_adc_measure(dacadc, scale, chx, chy):
     return np.array([dacadc.read_voltage(chx), dacadc.read_voltage(chy)]) / 2.5 * scale
@@ -215,183 +154,215 @@ def tm_tuneup(dc, read_voltage, gate_voltages):
     read_voltage()
     return gate
 
+def create_file(dv, cfg, **kwargs): # try kwarging the vfixed
+    try:
+        dv.mkdir(cfg['file']['data_dir'])
+        print "Folder {} was created".format(cfg['file']['data_dir'])
+        dv.cd(cfg['file']['data_dir'])
+    except Exception:
+        dv.cd(cfg['file']['data_dir'])
+
+    measurement = cfg['measurement']
+    var_name1 = cfg[measurement]['v1']
+    var_name2 = cfg[measurement]['v2']
+
+    plot_parameters = {'extent': [cfg['meas_parameters']['n0_rng'][0],
+                                  cfg['meas_parameters']['n0_rng'][1],
+                                  cfg['meas_parameters']['p0_rng'][0],
+                                  cfg['meas_parameters']['p0_rng'][1]],
+                       'pxsize': [cfg['meas_parameters']['n0_pnts'],
+                                  cfg['meas_parameters']['p0_pnts']]
+                      }
+
+    dv.new(cfg['file']['file_name']+"-plot", ("i", "j", var_name1, var_name2),
+           ('Cs', 'Ds', 'D', 'N', 'X', 'Y', 't'))
+    print("Created {}".format(dv.get_name()))
+    dv.add_comment(cfg['file']['comment'])
+    measurement_items = cfg[measurement].items()
+    for parameter in range(len(measurement_items)):
+        dv.add_parameter(measurement_items[parameter][0],measurement_items[parameter][1])
+    dv.add_parameters(cfg['acbox_settings'].items())
+    lockin_items = cfg['lockin_settings'].items()
+    for parameter in range(len(lockin_items)):
+        dv.add_parameter(lockin_items[parameter][0],lockin_items[parameter][1])
+    balancing_items = cfg['balancing_settings'].items()
+    for parameter in range(len(balancing_items)):
+        dv.add_parameter(balancing_items[parameter][0],balancing_items[parameter][1])
+    dv.add_parameter('n0_rng', cfg['meas_parameters']['n0_rng'])
+    dv.add_parameter('p0_pnts', cfg['meas_parameters']['p0_pnts'])
+    dv.add_parameter('n0_pnts', cfg['meas_parameters']['n0_pnts'])
+    dv.add_parameter('p0_rng', cfg['meas_parameters']['p0_rng'])
+    dv.add_parameter('extent', tuple(plot_parameters['extent']))
+    dv.add_parameter('pxsize', tuple(plot_parameters['pxsize']))
+    dv.add_parameter('plot', cfg['plot'])
+
+    if kwargs is not None:
+        for key, value in kwargs.items():
+            dv.add_parameter(key, value)
+
 def main():
+    # Loads config
+    with open("config.yml", 'r') as ymlfile:
+        cfg = yaml.load(ymlfile)
+
+    measurement = cfg['measurement']
+    measurement_settings = cfg[measurement]
+    balancing_settings = cfg['balancing_settings']
+    lockin_settings = cfg['lockin_settings']
+    acbox_settings = cfg['acbox_settings']
+    dacadc_settings = cfg['dacadc_settings']
+    meas_parameters = cfg['meas_parameters']
+    delta_var = meas_parameters['delta_var']
+    print delta_var
+
+    # Connections and Instrument Configurations
     cxn = labrad.connect()
+    reg = cxn.registry
     dv = cxn.data_vault
     dc = cxn.dac_adc
-    # mag = cxn.ami_430
-    # tc = cxn.lakeshore_372
-    lck = cxn.amatek_7280_lock_in_amplifier
+    mag = cxn.ami_430
+    mag.select_device()
+    tc = cxn.lakeshore_372
+    tc.select_device()
+    lck = lockin_select(cxn, cfg['lockin'])
+    lck.select_device()
     acbox = cxn.acbox
+    ac_scale = init_acbox(acbox, acbox_settings)
 
-    acbox.select_device()
-    acbox.initialize(15)
-    acbox.set_voltage("X1", acbox_settings['chX1'])
-    acbox.set_voltage("X2", acbox_settings['chX1'])
-    acbox.set_voltage("Y1", acbox_settings['chY1'])
-    acbox.set_voltage("Y2", acbox_settings['chY2'])
-    acbox.set_frequency(ac_freq)
-    time.sleep(1)
-
-    quad_dc = cxn.dcbox_quad_ad5780;
+    quad_dc = cxn.dcbox_quad_ad5780
     quad_dc.select_device()
-
 
     v_fixed = float(quad_dc.get_voltage(1))
     print("Fixed TM gating voltage is {}".format(v_fixed))
 
-
-
-
-    vs_scale = 10**(-acbox_settings['sample_atten']/20.0) * 250.0 * U.mV
-    refsc = 10**(-acbox_settings['ref_atten']/20.0) * 250.0 * U.mV
-    ratio = refsc / vs_scale
-
     dc.select_device()
-    dc.set_conversiontime(int(read_ch1), ADC_CONVERSIONTIME)
-    dc.set_conversiontime(int(read_ch2), ADC_CONVERSIONTIME)
+    dc.set_conversiontime(measurement_settings['read1'], ADC_CONVERSIONTIME)
+    dc.set_conversiontime(measurement_settings['read2'], ADC_CONVERSIONTIME)
 
+    reg.cd(['Measurements', 'Capacitance'])
+    rebalance = balancing_settings['rebalance']
+    if rebalance:
+        ch_x = measurement_settings['ch1']
+        ch_y = measurement_settings['ch2']
 
-    lck.select_device()
+        cb = init_bridge(lck, acbox, cfg)
+        v1_balance, v2_balance = function_select(measurement_settings['fixed'])(balancing_settings['p0'], balancing_settings['n0'], meas_parameters['delta_var'], v_fixed)
 
+        lck.time_constant(balancing_settings['balance_tc'])
+        dc.set_voltage(ch_x, v1_balance)
+        dc.set_voltage(ch_y, v2_balance)
 
+        print cb.balance()
+        cs, ds = cb.capacitance(ac_scale)
+        print("Via balance: Cs = {}, Ds = {}".format(cs, ds))
+        c_, d_ = cb.offBalance(ac_scale)
+        print("Scaling factors for offset: Ctg {} and Dtg {}".format(c_, d_))
+        reg.set('capacitance_params', [('cs', cs), ('ds', ds), ('c_', c_), ('d_', d_)])
 
-    ch_x = int(var_ch1)
-    ch_y = int(var_ch2)
+        vb = cb.vb # this is the balance point. this is a vector with (x,y) -> amplitude sqrt(x**2+y**2), phase (atan y/x)
+        magnitude = np.sqrt(vb[0]**2 + vb[1]**2)
+        phase = np.degrees(np.arctan2(vb[1], vb[0])) * (-1.0)
+        if phase < 0: phase = 360 + phase
+        reg.set('acbox_params', (magnitude, phase))
+    else:
+        acbox_params = reg.get('acbox_params')
+        ref_ch = "Y"+str(balancing_settings['ref_ch'])
+        acbox.set_voltage(ref_ch, acbox_params[0][0][0])
+        acbox.set_phase(acbox_params[1][0][0])
 
-    try:
-        dv.mkdir(data_dir)
-        print "Folder {} was created".format(data_dir)
-        dv.cd(data_dir)
-    except Exception:
-        dv.cd(data_dir)
+        cap_params = reg.get('capacitance_params')
+        cs = cap_params[0][1]
+        ds = cap_params[1][1]
+        c_ = cap_params[2][1]
+        d_ = cap_params[3][1]
+        print("Cs = {}, Ds = {}".format(cs, ds))
+        print("Scaling factors for offset: Ctg {} and Dtg {}".format(c_, d_))
 
-    iter = 4
-    cb = CapacitanceBridge(cxn, ratio, ref_ch=REF_CHN, time_const=18,
-                           iterations=iter, tolerance=tol, verbose=True, vsample=acbox_settings['chY1'])
+    capacitance_params = {'Capacitance': cs, 'Dissipation': ds,
+                          'offbalance c_': c_, 'offbalance d_': d_}
 
-    v1_balance, v2_balance = function_select(measurement['fixed'])(dbal, nbal, delta_var, v_fixed)
+    probe = tc.probe()
+    mc = tc.mc()
 
-    lck.tc(int(round(3 * math.log(balance_tc, 10) + 18)))
-    dc.set_voltage(ch_x, v1_balance)
-    dc.set_voltage(ch_y, v2_balance)
+    create_file(dv, cfg, **dict({'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
 
-    ac_gain_var = int(round(gaindB / 6.666))
-    tc_var = int(round(3 * math.log(tau, 10) + 18))
-    sens_var = int(round(3 * math.log(sens, 10) + 27))
-    lck.tc(tc_var)
-    lck.set_ac_gain(ac_gain_var)
-    lck.set_sensitivity(sens_var)
+    #ac_gain_var = int(round(lockin_settings['acgain'] / 6.666))
+    tc_var = lockin_settings['tc']
+    sens_var = lockin_settings['sensitiviy']
+    lck.time_constant(tc_var)
+    #lck.set_ac_gain(ac_gain_var)
+    lck.sensitivity(sens_var)
 
-    s = lck.get_sensitivity()['mV']
+    s = lck.sensitivity()
     time.sleep(.25)
     t0 = time.time()
 
-    print cb.balance(s1, s2)
-    cs, ds = cb.get_physical_quantitites()
-    print("Via balance: Cs = {}, Ds = {}".format(cs, ds))
-    c_, d_ = cb.offbalance_scale()
-    print("Scaling factors for offset: Ctg {} and Dtg {}".format(c_, d_))
+    pxsize = (meas_parameters['n0_pnts'], meas_parameters['p0_pnts'])
+    extent = (meas_parameters['n0_rng'][0], meas_parameters['n0_rng'][1], meas_parameters['p0_rng'][0], meas_parameters['p0_rng'][1])
+    num_x = pxsize[0]
+    num_y = pxsize[1]
+    print extent, pxsize
 
-    capacitance_params = {'Capacitance': cs, 'Dissipation': ds, 'offbalance c_': c_, 'offbalance d_': d_}
-
-    ac_gain_var = int(round(gaindB / 6.666))
-    tc_var = int(round(3 * math.log(tau, 10) + 18))
-    sens_var = int(round(3 * math.log(sens, 10) + 27))
-    lck.tc(tc_var)
-    lck.set_ac_gain(ac_gain_var)
-    lck.set_sensitivity(sens_var)
-
-    s = lck.get_sensitivity()['mV']
-    time.sleep(.25)
-    t0 = time.time()
+    DELAY_MEAS = 3 * lockin_settings['tc'] * 1e6
+    est_time = (pxsize[0] * pxsize[1] + pxsize[1]) * DELAY_MEAS * 1e-6 / 60.0
+    dt = pxsize[0]*DELAY_MEAS*1e-6/60.0
+    print("Will take a total of {} mins. With each line trace taking {} ".format(est_time, dt))
 
 
+    m, mdn = mesh(vfixed=v_fixed, offset=(0, -0.0), drange=(extent[2], extent[3]),
+                  nrange=(extent[0], extent[1]), fixed=measurement_settings['fixed'],
+                  pxsize=pxsize, delta=delta_var)
 
-    for k in range(var_extent.shape[0]):
-        extent = var_extent[k]
-        pxsize = var_pxsize[k]
-        num_x = pxsize[0]
-        num_y = pxsize[1]
-
-
-        print extent, pxsize
-
-        dv.new(file_name+"-plot", ("i", "j", var_name1, var_name2), ('Cs', 'Ds', 'D', 'N', 'X', 'Y', 'B', 't'))
-        est_time = (pxsize[0] * pxsize[1] + pxsize[1]) * DELAY_MEAS * 1e-6 / 60.0
-        dt = pxsize[0]*DELAY_MEAS*1e-6/60.0
-        print("Created {}. Will take a total of {} mins. With each line trace taking {} ".format(dv.get_name(), est_time, dt))
-        dv.add_comment(comment)
-        dv.add_parameters(measurement.items())
-        dv.add_parameters(acbox_settings.items())
-        dv.add_parameters(lockin_settings.items())
-        dv.add_parameters(balancing_settings.items())
-        dv.add_parameters(capacitance_params.items())
-        # dv.add_parameter('Mixing Chamber Temperature', t_mc)
-        # dv.add_parameter('Probe Temperature', t_probe)
-        dv.add_parameter('Magnetic Field', nhmfl_env['bfield'])
-        dv.add_parameter('Probe Temperature RuOx', nhmfl_env['t_ruox'])
-        dv.add_parameter('Probe Temperature Cernox', nhmfl_env['t_cernox'])
-        dv.add_parameter('extent', extent)
-        dv.add_parameter('pxsize', pxsize)
-        dv.add_parameters(x2amp.items())
-        dv.add_parameter('vfixed', v_fixed)
+    dac_ch1 = measurement_settings['ch1']
+    dac_ch2 = measurement_settings['ch2']
+    adc_ch1 = measurement_settings['read1']
+    adc_ch2 = measurement_settings['read2']
 
 
+    for i in range(num_y):
 
+        data_x = np.zeros(num_x)
+        data_y = np.zeros(num_x)
 
-        m, mdn = mesh(vfixed=v_fixed, offset=(0, -0.0), drange=(extent[2], extent[3]), nrange=(extent[0], extent[1]),
-                          fixed=measurement['fixed'], pxsize=pxsize, delta=delta_var)
+        vec_x = m[i, :][:, 0]
+        vec_y = m[i, :][:, 1]
 
+        # vec_x = (m[i, :][:, 0] - dacadc_settings['ch1_offset'])
+        # vec_y = (m[i, :][:, 1] - dacadc_settings['ch2_offset'])
 
-        for i in range(num_y):
+        md = mdn[i, :][:, 0]
+        mn = mdn[i, :][:, 1]
 
+        mask = np.logical_and(np.logical_and(vec_x <= X_MAX, vec_x >= X_MIN),
+                              np.logical_and(vec_y <= Y_MAX, vec_y >= Y_MIN))
+        if np.any(mask == True):
+            start, stop = np.where(mask == True)[0][0], np.where(mask == True)[0][-1]
 
+            num_points = stop - start + 1
+            # print(time.strftime("%Y-%m-%d %H:%M:%S"))
+            print("{} of {}  --> Ramping. Points: {}".format(i + 1, num_y, num_points))
+            dc.buffer_ramp([dac_ch1, dac_ch2],
+                           [adc_ch1, adc_ch2],
+                           [vec_x[start], vec_y[start]],
+                           [vec_x[stop], vec_y[stop]],
+                           num_points, DELAY_MEAS, ADC_AVGSIZE)
 
-            data_x = np.zeros(num_x)
-            data_y = np.zeros(num_x)
-            bfields = np.zeros(num_x)
+            d_read = dc.serial_poll.future(2, num_points)
+            d_tmp = d_read.result()
 
+            data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
+            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
+            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
 
-            # vec_x = m[i, :][:, 0]*scale
-            # vec_y = m[i, :][:, 1]*scale
+        d_cap = (c_ * data_x + d_ * data_y) + cs
+        d_dis = (d_ * data_x - c_ * data_y) + ds
 
-            vec_x = (m[i, :][:, 0] - ch1_offset)/ ch1_scale
-            vec_y = (m[i, :][:, 1] - ch2_offset) / ch2_scale
-
-            md = mdn[i, :][:, 0]
-            mn = mdn[i, :][:, 1]
-
-            mask = np.logical_and(np.logical_and(vec_x <= X_MAX, vec_x >= X_MIN),
-                                    np.logical_and(vec_y <= Y_MAX, vec_y >= Y_MIN))
-            if np.any(mask == True):
-                start, stop = np.where(mask == True)[0][0], np.where(mask == True)[0][-1]
-
-                num_points = stop - start + 1
-                print(time.strftime("%Y-%m-%d %H:%M:%S"))
-                print("{} of {}  --> Ramping. Points: {}".format(i + 1, num_y, num_points))
-
-                dc.buffer_ramp([int(var_ch1), int(var_ch2)], [int(read_ch1), int(read_ch2), 2],
-                                [vec_x[start], vec_y[start]],
-                                [vec_x[stop], vec_y[stop]],
-                                num_points, DELAY_MEAS, ADC_AVGSIZE)
-
-                d_read = dc.serial_poll.future(3, num_points)
-                d_tmp = d_read.result()
-
-                data_x[start:stop + 1], data_y[start:stop + 1], bfields[start:stop + 1] = d_tmp
-                data_x[start:stop + 1] = (data_x[start:stop + 1] / 2.5 * s - adc_offset[0]) / adc_slope[0]
-                data_y[start:stop + 1] = (data_y[start:stop + 1] / 2.5 * s - adc_offset[1]) / adc_slope[1]
-
-            d_cap = (c_ * data_x + d_ * data_y) + cs
-            d_dis = (d_ * data_x - c_ * data_y) + ds
-
-            j = np.linspace(0, num_x - 1, num_x)
-            ii = np.ones(num_x) * i
-            t1 = np.ones(num_x) * time.time() - t0
-            totdata = np.array([j, ii, vec_x, vec_y, d_cap, d_dis, md, mn, data_x, data_y, bfields, t1])
-            dv.add(totdata.T)
-        print("it took {} s. to write data".format(time.time() - t0))
+        j = np.linspace(0, num_x - 1, num_x)
+        ii = np.ones(num_x) * i
+        t1 = np.ones(num_x) * time.time() - t0
+        totdata = np.array([j, ii, vec_x, vec_y, d_cap, d_dis, md, mn, data_x, data_y, t1])
+        dv.add(totdata.T)
+    print("it took {} s. to write data".format(time.time() - t0))
 
 
 if __name__ == '__main__':

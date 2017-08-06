@@ -41,6 +41,7 @@ class LinearBalancingBridge(object):
         c = m1 - s_pred
         return c
 
+
     def findBalance(self, M=None, c=None):
         """
         Retun balance point vector v_b for a given Linear response matrix
@@ -84,26 +85,45 @@ class LinearBalancingBridge(object):
         if matrix is None:
             self.excite(self.s1)
             m1 = self.measure()
+            print "m1"
+            print m1
             self.excite(self.s2)
             m2 = self.measure()
             self.M  = self.responseMatrix(self.s1, self.s2, m1, m2)[0]
         else:
             self.M = matrix
 
+        print 'balance:'
+        print 'matrix: '
+        print self.M
+
+
         if offset is None:
             self.constantOffset = self.refineBalance(self.s1, m1)
         else:
             self.constantOffset = offset
 
+        print 'offset'
+        print self.constantOffset
+
         i = 1
         balanced = False
         while not balanced:
+            print 'iteration'
+            print i
             self.vb = self.findBalance()
-            if all(self.vb > 1):
+            print 'vb'
+            print self.vb
+            if all(np.abs(self.vb) < 1):
                 self.excite(self.vb)
                 mb = self.measure()
+                print 'mb'
+                print mb
                 self.constantOffset = self.refineBalance(self.vb, mb)
+                print 'constantoffset'
+                print self.constantOffset
                 i+=1
+                print tol
                 if np.linalg.norm(mb) < tol:
                     balanced = True
                     print("Balanced")
@@ -125,11 +145,11 @@ class LinearBalancingBridge(object):
 
 
 class CapacitanceBridge(LinearBalancingBridge):
-    def __init__(self, acbox, excitation_chanel, lck, *args, **kwargs):
+    def __init__(self, acbox, excitation_channel, lck, *args, **kwargs):
         super(CapacitanceBridge, self).__init__(*args, **kwargs)
         self.ac = acbox
         self.lck = lck
-        self.chanel = excitation_chanel
+        self.channel = excitation_channel
 
     def capacitance(self, ac_scale):
         """
@@ -138,18 +158,19 @@ class CapacitanceBridge(LinearBalancingBridge):
         vb = self.vb
         c_sample = -1.0 * vb[0, 0] * ac_scale
         d_sample = 1.0 * vb[1, 0] * ac_scale
-        return mp.array((c_sample, d_sample))
+        return np.array((c_sample, d_sample))
 
     def offBalance(self, ac_scale):
         """
         Return scaling factors for offbalance capacitance and dissipation
         """
-        M = np.linalg.det(self.responseMatrix)
-        vbx, vby = vb.flatten()
-        vdx, vdy = self.constantOffset.flatten()
+        M = np.linalg.det(self.M)
+        vbx, vby = np.array(self.vb).flatten()
+        vdx, vdy = np.array(self.constantOffset).flatten()
 
         Dtg = ( vby * vdx - vbx * vdy) / (vbx ** 2 + vby ** 2) / M * ac_scale
         Ctg = -1.0*( vbx * vdx + vby * vdy) / (vbx ** 2 + vby **2 ) / M * ac_scale
+
         return Ctg, Dtg
 
 
@@ -159,14 +180,15 @@ class CapacitanceBridge7280Lockin(CapacitanceBridge):
     Signal Recovery 7280 lockin amplifier. The AC excitation is provide by an
     AD**** AC box.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, time_const=None, *args, **kwargs):
         super(CapacitanceBridge7280Lockin, self).__init__(*args, **kwargs)
+        if time_const is not None:
+            self.lck.tc(time_const)
+            time.sleep(self.lck.wait_time())
 
     def measure(self):
-        lck = self.lockin
+        lck = self.lck
         lck.set_auto_s()
-        time.sleep(10)
-
         time.sleep(lck.wait_time())
         x = lck.read_x()
         y = lck.read_y()
@@ -176,7 +198,7 @@ class CapacitanceBridge7280Lockin(CapacitanceBridge):
         ac = self.ac
         phase = self.vec_phase(s_in)
         ac.set_phase(phase)
-        ac.set_voltage(self.chanel, np.linalg.norm(s_in))
+        ac.set_voltage(self.channel, np.linalg.norm(s_in))
         return True
 
     @staticmethod
@@ -191,8 +213,11 @@ class CapacitanceBridgeSR830Lockin(CapacitanceBridge):
     Linear capacitance balancing bridge. Measurements are preformed with SRS
     SR830 lockin amplifier. The AC excitation is provide by an AD**** AC box.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, time_const=None, *args, **kwargs):
         super(CapacitanceBridgeSR830Lockin, self).__init__(*args, **kwargs)
+        if time_const is not None:
+            self.lck.time_constant(time_const)
+            time.sleep(self.lck.wait_time())
 
     def measure(self):
         lck = self.lck
@@ -205,11 +230,24 @@ class CapacitanceBridgeSR830Lockin(CapacitanceBridge):
         return meas
 
     def excite(self, s_in):
+        print 'Excite:'
         ac = self.ac
         phase = self.vec_phase(s_in)
+        print 'phase: '
+        print phase
         ac.set_phase(phase)
-        ac.set_voltage(self.chanel, np.linalg.norm(s_in))
+        ac.set_voltage(self.channel, np.linalg.norm(s_in))
         return True
+
+    def convertData(self, raw_meas, adc_offset=0, adc_scale=1, dac_offset=0, dac_expand=1):
+        x, y = raw_meas
+        fullscale = 10
+        lck = self.lck
+        sen = lck.sensitivity()
+        x = ((x/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
+        y = ((y/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
+        return x,y
+
 
     @staticmethod
     def vec_phase(s):

@@ -1,0 +1,72 @@
+# Configuration file for Capacitance Landau Fan in MLG.
+# Top Gate fixed
+
+file:
+  data_dir: LEO_CAP_003
+  file_name: devB_Cpen_12T
+  comment: Cpen 12T
+
+measurement: Cpen
+
+Cpen:
+  v1: V_bg [V]
+  v2: V_sample [V]
+  ch1: 0
+  ch2: 1
+  read1: 0
+  read2: 1
+  fixed: vt
+
+Csym:
+  v1: V_tg [V]
+  v2: V_bg [V]
+  ch1: 1
+  ch2: 0
+  read1: 0
+  read2: 1
+  fixed: vs
+
+lockin: SR830  # Write 'SR830' or '7820'
+
+lockin_settings:
+  tc: 0.003
+  acgain: 14
+  sensitiviy: 20.0e-3
+
+balancing_settings:
+  balance_tc: 0.03
+  n0: 0.5
+  p0: 0
+  tolerance: 0.01e-3
+  ref_ch: 2
+  offset:
+    - -0.0
+    - 0.0
+  iter: 10
+  rebalance : False
+
+acbox_settings:
+  chX1: 1.0
+  chX2: 1.0
+  chY1: 0.75
+  chY2: 0.75
+  frequency: 81564.41
+  ref_atten: 16
+  sample_atten: 36
+
+dacadc_settings:
+  ch1_offset: -0.0024784313
+  ch2_offset: -0.0043156862
+
+meas_parameters:
+  n0_pnts: 3300
+  p0_pnts: 1000
+  n0_rng:
+    - -1.9
+    - 1.9
+  p0_rng:
+    - -5
+    - 5
+  delta_var: -0.008
+
+plot: True

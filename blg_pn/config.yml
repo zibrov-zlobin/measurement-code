@@ -2,20 +2,20 @@
 # Top Gate fixed
 
 file:
-  data_dir: LEO_CAP_003
-  file_name: devB_Cpen_12T
-  comment: Cpen 12T
+  data_dir: HZS63
+  file_name: Cpen_30T_lines
+  comment: Rox = 325 mK, drain = 0.1V
 
 measurement: Cpen
 
 Cpen:
-  v1: V_bg [V]
+  v1: V_tg [V]
   v2: V_sample [V]
   ch1: 0
   ch2: 1
   read1: 0
   read2: 1
-  fixed: vt
+  fixed: vb
 
 Csym:
   v1: V_tg [V]
@@ -26,47 +26,47 @@ Csym:
   read2: 1
   fixed: vs
 
-lockin: SR830  # Write 'SR830' or '7820'
+lockin: SR830  # Write 'SR830' or '7280'
 
 lockin_settings:
-  tc: 0.003
+  tc: 0.10
   acgain: 14
-  sensitiviy: 20.0e-3
-
+  sensitiviy: 5.0e-3
+  
 balancing_settings:
-  balance_tc: 0.03
-  n0: 0.5
+  balance_tc: 0.1
+  n0: 0.3
   p0: 0
-  tolerance: 0.01e-3
+  tolerance: 0.005e-3
   ref_ch: 2
   offset:
     - -0.0
     - 0.0
-  iter: 10
-  rebalance : False
+  iter: 5
+  rebalance : True
 
 acbox_settings:
   chX1: 1.0
   chX2: 1.0
   chY1: 0.75
   chY2: 0.75
-  frequency: 81564.41
-  ref_atten: 16
-  sample_atten: 36
+  frequency: 33564.41
+  ref_atten: 26
+  sample_atten: 33
 
 dacadc_settings:
   ch1_offset: -0.0024784313
   ch2_offset: -0.0043156862
 
 meas_parameters:
-  n0_pnts: 3300
-  p0_pnts: 1000
+  n0_pnts: 1050
+  p0_pnts: 1
   n0_rng:
-    - -1.9
-    - 1.9
+    - 5.4
+    - 7.1
   p0_rng:
-    - -5
-    - 5
-  delta_var: -0.008
+    - -2.0
+    - -2.0
+  delta_var: -0.028
 
 plot: True

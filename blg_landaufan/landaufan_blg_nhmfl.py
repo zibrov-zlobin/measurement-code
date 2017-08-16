@@ -20,10 +20,10 @@ import yaml
 
 RAMP_SPEED = 5.0  # volts per sec
 RAMP_WAIT = 0.000  # seconds
-X_MAX = 6.0
-X_MIN = -6.0
-Y_MAX = 4.0
-Y_MIN = -5.0
+X_MAX = 12.0
+X_MIN = -16.0
+Y_MAX = 8.0
+Y_MIN = -12.0
 ADC_CONVERSIONTIME = 250
 ADC_AVGSIZE = 1
 
@@ -123,13 +123,20 @@ def init_bridge(lck, acbox, cfg):
 def rampfield(mag, field):
     print 'Ramping field to %1.5f ...' % field
     mag.setpoint(field)
-    mag.ramp()
+    # mag.ramp()
+    # time.sleep(0.3)
     status = mag.status()
-    target_field = float(status['Setpoint'])
+    # time.sleep(0.3)
+    target_field = field
     actual_field = float(status['Field'])
-    while abs(target_field - actual_field) > 1e-4:
-        time.sleep(1)
+    # print(target_field)
+    # print(actual_field)
+    while abs(target_field - actual_field) > 1e-2:
+        # time.sleep(1)
+        status = mag.status()
+        # time.sleep(0.3)
         actual_field = float(status['Field'])
+        # print(actual_field)
     print 'Target field reached.'
 
 def dac_adc_measure(dacadc, scale, chx, chy):
@@ -252,11 +259,11 @@ def main():
     reg = cxn.registry
     dv = cxn.data_vault
     dc = cxn.dac_adc
-    mag = NHMFLMagnetControl.NHMFLMagnetControl()
-    tc = cxn.lakeshore_372
-    tc.select_device()
+    mag = NHMFLMagnetControl.NHMFLMagnetControl('146.201.231.43')
+    #tc = cxn.lakeshore_372
+    #tc.select_device()
     lck = lockin_select(cxn, cfg['lockin'])
-    lck.select_device()
+    lck.select_device(0)
     acbox = cxn.acbox
     ac_scale = init_acbox(acbox, acbox_settings)
 
@@ -272,11 +279,12 @@ def main():
 
     reg.cd(['Measurements', 'Capacitance'])
     rebalance = balancing_settings['rebalance']
+    cb = init_bridge(lck, acbox, cfg)
+
     if rebalance:
         ch_x = measurement_settings['ch1']
         ch_y = measurement_settings['ch2']
 
-        cb = init_bridge(lck, acbox, cfg)
         v1_balance, v2_balance = function_select(measurement_settings['fixed'])(balancing_settings['p0'], balancing_settings['n0'], meas_parameters['delta_var'], v_fixed)
 
         lck.time_constant(balancing_settings['balance_tc'])
@@ -312,11 +320,12 @@ def main():
     capacitance_params = {'Capacitance': cs, 'Dissipation': ds,
                           'offbalance c_': c_, 'offbalance d_': d_}
 
-    probe = tc.probe()
-    mc = tc.mc()
+    #probe = tc.probe()
+    #mc = tc.mc()
     p0fixed = meas_parameters['p0fixed']
 
-    create_file(dv, cfg, **dict({'p0fixed': p0fixed, 'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
+    #create_file(dv, cfg, **dict({'p0fixed': p0fixed, 'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
+    create_file(dv, cfg, **dict({'p0fixed': p0fixed, 'vfixed': v_fixed}, **capacitance_params))
 
     #ac_gain_var = int(round(lockin_settings['acgain'] / 6.666))
     tc_var = lockin_settings['tc']
@@ -325,8 +334,8 @@ def main():
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
-    s = lck.sensitivity()
-    time.sleep(.25)
+    # s = lck.sensitivity()
+    # time.sleep(.25)
     t0 = time.time()
 
     pxsize = (meas_parameters['n0_pnts'], meas_parameters['b_pnts'])
@@ -350,7 +359,7 @@ def main():
 
 
     for i in range(num_y):
-        #rampfield(mag, field[i])
+        rampfield(mag, field[i])
 
         if meas_parameters['bscale']:
             bscale = field[i]*1.0/field[0]*meas_parameters['scalefactor']
@@ -367,8 +376,8 @@ def main():
         data_x = np.zeros(num_x)
         data_y = np.zeros(num_x)
 
-        vec_x = m[i, :][:, 0]
-        vec_y = m[i, :][:, 1]
+        vec_x = m[i, :][:, 0]*0.5
+        vec_y = m[i, :][:, 1]*0.5
 
         # vec_x = (m[i, :][:, 0] - dacadc_settings['ch1_offset'])
         # vec_y = (m[i, :][:, 1] - dacadc_settings['ch2_offset'])
@@ -376,8 +385,8 @@ def main():
         md = mdn[i, :][:, 0]
         mn = mdn[i, :][:, 1]
 
-        mask = np.logical_and(np.logical_and(vec_x <= X_MAX, vec_x >= X_MIN),
-                              np.logical_and(vec_y <= Y_MAX, vec_y >= Y_MIN))
+        mask = np.logical_and(np.logical_and(vec_x <= X_MAX*0.5, vec_x >= X_MIN*0.5),
+                              np.logical_and(vec_y <= Y_MAX*0.5, vec_y >= Y_MIN*0.5))
         if np.any(mask == True):
             start, stop = np.where(mask == True)[0][0], np.where(mask == True)[0][-1]
 
@@ -394,8 +403,8 @@ def main():
             d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
-            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
-            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
 
         d_cap = (c_ * data_x + d_ * data_y) + cs
         d_dis = (d_ * data_x - c_ * data_y) + ds

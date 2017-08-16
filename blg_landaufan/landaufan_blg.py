@@ -3,12 +3,17 @@
 version = 2.0
 '''
 
+import os,sys,inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir)
+
 import time
 import math
 import numpy as np
 import labrad
 import labrad.units as U
-import CapacitanceBridge
+from include import CapacitanceBridge, NHMFLMagnetControl
 import yaml
 
 # TODO: make a gui.
@@ -267,11 +272,11 @@ def main():
 
     reg.cd(['Measurements', 'Capacitance'])
     rebalance = balancing_settings['rebalance']
+    cb = init_bridge(lck, acbox, cfg)
     if rebalance:
         ch_x = measurement_settings['ch1']
         ch_y = measurement_settings['ch2']
 
-        cb = init_bridge(lck, acbox, cfg)
         v1_balance, v2_balance = function_select(measurement_settings['fixed'])(balancing_settings['p0'], balancing_settings['n0'], meas_parameters['delta_var'], v_fixed)
 
         lck.time_constant(balancing_settings['balance_tc'])
@@ -320,8 +325,8 @@ def main():
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
-    s = lck.sensitivity()
-    time.sleep(.25)
+    #s = lck.sensitivity()
+    #time.sleep(.25)
     t0 = time.time()
 
     pxsize = (meas_parameters['n0_pnts'], meas_parameters['b_pnts'])
@@ -345,7 +350,7 @@ def main():
 
 
     for i in range(num_y):
-        #rampfield(mag, field[i])
+        rampfield(mag, field[i])
 
         if meas_parameters['bscale']:
             bscale = field[i]*1.0/field[0]*meas_parameters['scalefactor']
@@ -389,8 +394,8 @@ def main():
             d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
-            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
-            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
 
         d_cap = (c_ * data_x + d_ * data_y) + cs
         d_dis = (d_ * data_x - c_ * data_y) + ds

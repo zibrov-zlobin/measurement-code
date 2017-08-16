@@ -3,7 +3,7 @@ from PyQt4 import QtGui, QtCore
 from twisted.internet.defer import inlineCallbacks
 import numpy as np
 
-DIR_PLOT = "AC_TL"
+DIR_PLOT = "HZS63"
 
 class MainWindow(QtGui.QMainWindow):
     """
@@ -72,7 +72,7 @@ class MainWindow(QtGui.QMainWindow):
         self.win2.setImage(self.dy, pos=[x0, y0], scale=[xscale, yscale])
         self.plot1 = pg.PlotCurveItem(x=[], y=[])
         self.plot2 = pg.PlotCurveItem(x=[], y=[])
-        pen1 = pg.mkPen('y', width=1.5) 
+        pen1 = pg.mkPen('y', width=1.5)
         pen2 = pg.mkPen('c', width=1.5)
         self.plot1.setPen(pen1)
         self.plot2.setPen(pen2)
@@ -146,6 +146,8 @@ class Sweep2DWidget(QtGui.QWidget):
         # self.chBx_autolevels1.stateChanged.connect()
         self.view1.setAspectLocked(False)
         self.win1 = pg.ImageView(view=self.view1)
+        self.view1.setAspectLocked(False)
+
 
         self.layout.addWidget(self.win1, *(0,0))
         self.layout.addWidget(self.chBx_autolevels1, *(1,0))
@@ -153,14 +155,15 @@ class Sweep2DWidget(QtGui.QWidget):
         # self.dislayout = QtGui.QVBoxLayout(self)
         self.view2 = pg.PlotItem(title="Dissipation", labels={'right': "V1", 'bottom': "V2",
                                                                                 'top': "V2", 'left': "V1"})
-        
+
         self.view2.setAspectLocked(False)
         self.chBx_autolevels2 = QtGui.QCheckBox('Auto Levels')
         self.win2 = pg.ImageView(view=self.view2)
+        self.view2.setAspectLocked(False)
         self.layout.addWidget(self.win2, *(0,1))
         self.layout.addWidget(self.chBx_autolevels2, *(1,1))
 
-        
+
         # self.layout.addWidget(self.win1)
 
         # self.win2 = pg.ImageView(view=self.view2)
@@ -185,7 +188,7 @@ class LineTraces(QtGui.QWidget):
         super(LineTraces, self).__init__(parent)
         self.layout = QtGui.QVBoxLayout(self)
         self.cap = pg.PlotWidget(title="Capacitance", labels={'left': "V1", 'bottom': "V2"})
-        self.dis = pg.PlotWidget(title="Dissipation", labels={'left': "V1", 'bottom': "V2"}) 
+        self.dis = pg.PlotWidget(title="Dissipation", labels={'left': "V1", 'bottom': "V2"})
         self.layout.addWidget(self.cap)
         self.layout.addWidget(self.dis)
         self.setLayout(self.layout)

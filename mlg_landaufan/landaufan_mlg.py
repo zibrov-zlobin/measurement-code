@@ -221,10 +221,9 @@ def main():
 
     reg.cd(['Measurements', 'Capacitance'])
     rebalance = balancing_settings['rebalance']
+    cb = init_bridge(lck, acbox, cfg)
     if rebalance:
         ch_x = measurement_settings['ch1']
-
-        cb = init_bridge(lck, acbox, cfg)
 
         f = function_select(measurement_settings['fixed'])
         v1_balance = f(balancing_settings['n0'], v_fixed)
@@ -235,7 +234,7 @@ def main():
         print cb.balance()
         cs, ds = cb.capacitance(ac_scale)
         print("Via balance: Cs = {}, Ds = {}".format(cs, ds))
-        c_, d_ = cb.capacitance(ac_scale)
+        c_, d_ = cb.offBalance(ac_scale)
         print("Scaling factors for offset: Ctg {} and Dtg {}".format(c_, d_))
         reg.set('capacitance_params', [('cs', cs), ('ds', ds), ('c_', c_), ('d_', d_)])
 
@@ -273,8 +272,8 @@ def main():
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
-    s = lck.sensitivity()
-    time.sleep(.25)
+    #s = lck.sensitivity()
+    #time.sleep(.25)
     t0 = time.time()
 
     pxsize = (meas_parameters['n0_pnts'], meas_parameters['b_pnts'])
@@ -301,7 +300,7 @@ def main():
     f = function_select(measurement_settings['fixed'])
 
     for i in range(num_y):
-        #rampfield(mag, field[i])
+        rampfield(mag, field[i])
 
         if meas_parameters['bscale']:
             bscale = field[i]*1.0/field[0]*meas_parameters['scalefactor']
@@ -340,8 +339,8 @@ def main():
             d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
-            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
-            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
 
             d_cap = (c_ * data_x + d_ * data_y) + cs
             d_dis = (d_ * data_x - c_ * data_y) + ds

@@ -2,20 +2,20 @@
 # Top Gate fixed
 
 file:
-  data_dir: EMS025
-  file_name: EMS15_lowfield_test
-  comment: Cpen
+  data_dir: HZS63
+  file_name: Cpen_LandauFan_PP
+  comment: Rox=340
 
 measurement: Cpen
 
 Cpen:
-  v1: V_bg [V]
-  v2: V_sample [V
+  v1: V_tg [V]
+  v2: V_sample [V]
   ch1: 0
   ch2: 1
   read1: 0
   read2: 1
-  fixed: vt
+  fixed: vb
 
 Csym:
   v1: V_tg [V]
@@ -31,44 +31,44 @@ lockin: SR830  # Write 'SR830' or '7820'
 lockin_settings:
   tc: 0.003
   acgain: 14
-  sensitiviy: 20.0e-3
+  sensitiviy: 5.0e-3
 
 balancing_settings:
-  balance_tc: 0.10
-  n0: 0.5
+  balance_tc: 0.001
+  n0: 0.3
   p0: 0
-  tolerance: 0.01e-3
+  tolerance: 0.005e-3
   ref_ch: 2
   offset:
     - -0.0
     - 0.0
-  iter: 2
-  rebalance: False
+  iter: 5
+  rebalance: True
 
 acbox_settings:
   chX1: 1.0
   chX2: 1.0
   chY1: 0.75
   chY2: 0.75
-  frequency: 87777.77
-  ref_atten: 0
-  sample_atten: 0
+  frequency: 83564.41
+  ref_atten: 23
+  sample_atten: 30
 
 dacadc_settings:
   ch1_offset: -0.0024784313
   ch2_offset: -0.0043156862
 
 meas_parameters:
-  n0_pnts: 10
-  b_pnts: 10
+  n0_pnts: 1100
+  b_pnts: 331
   n0_rng:
-    - 0.01
-    - 0.05
+    - 8.1
+    - 10.65
   b_rng:
-    - 0.1
-    - 0.2
-  p0fixed: 0
-  delta_var: 0
+    - 45
+    - 12
+  p0fixed: -2.0
+  delta_var: -0.028
   bscale: True
   zOffset: 0.0
   scalefactor: 1.0

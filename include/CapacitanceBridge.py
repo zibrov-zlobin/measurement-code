@@ -165,6 +165,10 @@ class CapacitanceBridge(LinearBalancingBridge):
         Return scaling factors for offbalance capacitance and dissipation
         """
         M = np.linalg.det(self.M)
+        print("responser matrix determinant = {}".format(M))
+        print("ac scaling is= {}".format(ac_scale))
+        print("vb = {}".format(self.vb))
+        print("vd = {}".format(self.constantOffset.flatten()))
         vbx, vby = np.array(self.vb).flatten()
         vdx, vdy = np.array(self.constantOffset).flatten()
 
@@ -240,13 +244,14 @@ class CapacitanceBridgeSR830Lockin(CapacitanceBridge):
         return True
 
     def convertData(self, raw_meas, adc_offset=0, adc_scale=1, dac_offset=0, dac_expand=1):
-        x, y = raw_meas
+        x = raw_meas
         fullscale = 10
         lck = self.lck
         sen = lck.sensitivity()
-        x = ((x/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
-        y = ((y/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
-        return x,y
+        # x = ((x/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
+        x = (x - adc_offset)/adc_scale*sen/fullscale
+        # y = ((y/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
+        return x
 
 
     @staticmethod

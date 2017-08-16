@@ -3,10 +3,10 @@
 
 file:
   data_dir: EMS025
-  file_name: Cpen_lowfield_test
-  comment: Cpen
+  file_name: Cpen_FCI_line
+  comment: Cpen, Trox = 330 mK at base (measured at 11T), rebalanced
 
-measurement: Ctop
+measurement: Cbot
 
 Ctop:
   v1: V_sample [V]
@@ -17,7 +17,7 @@ Ctop:
   fixed: vt
 
 Cbot:
-  v1: V_sample [V]
+  v1: V_TG [V]
   v2: B_field [T]
   ch1: 0
   read1: 0
@@ -27,18 +27,18 @@ Cbot:
 lockin: SR830  # Write 'SR830' or '7820'
 
 lockin_settings:
-  tc: 0.001
-  acgain: 14
+  tc: 0.010
+  acgain: 0
   sensitiviy: 20.0e-3
 
 balancing_settings:
   balance_tc: 0.10
-  n0: -1.0
-  tolerance: 0.01e-3
+  n0: -6.1
+  tolerance: 0.005e-3
   ref_ch: 2
   offset:
     - -0.0
-  iter: 4
+  iter: 5
   rebalance: False
 
 acbox_settings:
@@ -46,23 +46,23 @@ acbox_settings:
   chX2: 1.0
   chY1: 0.75
   chY2: 0.75
-  frequency: 87777.77
-  ref_atten: 0
-  sample_atten: 0
+  frequency: 87564.41
+  ref_atten: 26
+  sample_atten: 33
 
 dacadc_settings:
   ch1_offset: -0.0024784313
   ch2_offset: -0.0043156862
 
 meas_parameters:
-  n0_pnts: 10
-  b_pnts: 10
+  n0_pnts: 5200
+  b_pnts: 1
   n0_rng:
-    - 0.001
-    - 0.005
+    - -5.6
+    - 2.8
   b_rng:
-    - 0.1
-    - 0.2
+    - 33.6
+    - 33.6
   bscale: False
   zOffset: 0.0
   scalefactor: 1.0

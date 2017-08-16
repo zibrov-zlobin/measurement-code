@@ -14,8 +14,8 @@ import yaml
 
 RAMP_SPEED = 5.0  # volts per sec
 RAMP_WAIT = 0.000  # seconds
-X_MAX = 5.0
-X_MIN = -5.0
+X_MAX = 10.0
+X_MIN = -10.0
 ADC_CONVERSIONTIME = 250
 ADC_AVGSIZE = 1
 
@@ -25,7 +25,7 @@ s1 = np.array((0.5, 0.5)).reshape(2, 1)
 s2 = np.array((-0.5, -0.5)).reshape(2, 1)
 
 def vb_fixed(n0, vb):
-    return n0 - vb
+    return n0-vb
 
 def vt_fixed(n0, vt):
     return -n0 + vt
@@ -44,9 +44,9 @@ def lockin_select(cxn, s):
         return cxn.amatek_7280_lock_in_amplifier
 
 def init_acbox(acbox, stngs):
-    vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0 * U.mV
-    refsc = 10**(-stngs['ref_atten']/20.0) * 250.0 * U.mV
-    ac_scale = (refsc / vs_scale)/float(stngs['chY1'])
+    # vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0 * U.mV
+    # refsc = 10**(-stngs['ref_atten']/20.0) * 250.0 * U.mV
+    ac_scale = 10**(-(stngs['ref_atten'] - stngs['sample_atten'])/20.0)/float(stngs['chY1'])
     acbox.select_device()
     acbox.initialize(15)
     acbox.set_voltage("X1", stngs['chX1'])
@@ -133,15 +133,23 @@ def create_file(dv, cfg, **kwargs): # try kwarging the vfixed
             dv.add_parameter(key, value)
 
 def rampfield(mag, field):
+    # mag.fieldpoll(field)
     print 'Ramping field to %1.5f ...' % field
     mag.setpoint(field)
-    mag.ramp()
+    # mag.ramp()
+    time.sleep(0.3)
     status = mag.status()
-    target_field = float(status['Setpoint'])
+    time.sleep(0.3)
+    target_field = field
     actual_field = float(status['Field'])
-    while abs(target_field - actual_field) > 1e-4:
+    # print(target_field)
+    # print(actual_field)
+    while abs(target_field - actual_field) > 1e-2:
         time.sleep(1)
+        status = mag.status()
+        time.sleep(0.3)
         actual_field = float(status['Field'])
+        # print(actual_field)
     print 'Target field reached.'
 
 def dac_adc_measure(dacadc, scale, chx, chy):
@@ -199,11 +207,11 @@ def main():
     reg = cxn.registry
     dv = cxn.data_vault
     dc = cxn.dac_adc
-    mag = NHMFLMagnetControl.NHMFLMagnetControl()
+    mag = NHMFLMagnetControl.NHMFLMagnetControl('146.201.231.43')
     lck = lockin_select(cxn, cfg['lockin'])
-    lck.select_device()
-    tc = cxn.lakeshore_372
-    tc.select_device()
+    lck.select_device(0)
+    #tc = cxn.lakeshore_372
+    #tc.select_device()
     acbox = cxn.acbox
     ac_scale = init_acbox(acbox, acbox_settings)
 
@@ -220,10 +228,11 @@ def main():
 
     reg.cd(['Measurements', 'Capacitance'])
     rebalance = balancing_settings['rebalance']
+    cb = init_bridge(lck, acbox, cfg)
+
     if rebalance:
         ch_x = measurement_settings['ch1']
 
-        cb = init_bridge(lck, acbox, cfg)
 
         f = function_select(measurement_settings['fixed'])
         v1_balance = f(balancing_settings['n0'], v_fixed)
@@ -234,7 +243,7 @@ def main():
         print cb.balance()
         cs, ds = cb.capacitance(ac_scale)
         print("Via balance: Cs = {}, Ds = {}".format(cs, ds))
-        c_, d_ = cb.capacitance(ac_scale)
+        c_, d_ = cb.offBalance(ac_scale)
         print("Scaling factors for offset: Ctg {} and Dtg {}".format(c_, d_))
         reg.set('capacitance_params', [('cs', cs), ('ds', ds), ('c_', c_), ('d_', d_)])
 
@@ -260,10 +269,11 @@ def main():
     capacitance_params = {'Capacitance': cs, 'Dissipation': ds,
                           'offbalance c_': c_, 'offbalance d_': d_}
 
-    probe = tc.probe()
-    mc = tc.mc()
+    #probe = tc.probe()
+    #mc = tc.mc()
 
-    create_file(dv, cfg, **dict({'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
+    #create_file(dv, cfg, **dict({'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
+    create_file(dv, cfg, **dict({'vfixed': v_fixed}, **capacitance_params))
 
     #ac_gain_var = int(round(gaindB / 6.666))
     tc_var = lockin_settings['tc']
@@ -272,8 +282,8 @@ def main():
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
-    s = lck.sensitivity()
-    time.sleep(.25)
+    # s = lck.sensitivity()
+    # time.sleep(.25)
     t0 = time.time()
 
     pxsize = (meas_parameters['n0_pnts'], meas_parameters['b_pnts'])
@@ -300,7 +310,7 @@ def main():
     f = function_select(measurement_settings['fixed'])
 
     for i in range(num_y):
-        #rampfield(mag, field[i])
+        rampfield(mag, field[i])
 
         if meas_parameters['bscale']:
             bscale = field[i]*1.0/field[0]*meas_parameters['scalefactor']
@@ -339,8 +349,8 @@ def main():
             d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
-            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
-            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
 
             d_cap = (c_ * data_x + d_ * data_y) + cs
             d_dis = (d_ * data_x - c_ * data_y) + ds

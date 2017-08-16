@@ -19,10 +19,10 @@ import yaml
 
 RAMP_SPEED = 5.0  # volts per sec
 RAMP_WAIT = 0.000  # seconds
-X_MAX = 6.0
-X_MIN = -6.0
-Y_MAX = 4.0
-Y_MIN = -5.0
+X_MAX = 12.0
+X_MIN = -16.0
+Y_MAX = 8
+Y_MIN = -12.0
 ADC_CONVERSIONTIME = 250
 ADC_AVGSIZE = 1
 
@@ -86,15 +86,19 @@ def function_select(s):
     return f
 
 def lockin_select(cxn, s):
+    lck = None
     if s == 'SR830':
-        return cxn.sr830
-    elif s == '7820':
-        return cxn.amatek_7280_lock_in_amplifier
+        lck = cxn.sr830
+    elif s == '7280':
+        print "connecting to 7280"
+        lck = cxn.amatek_7280_lock_in_amplifier
+    return lck
 
 def init_acbox(acbox, stngs):
-    vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0 * U.mV
-    refsc = 10**(-stngs['ref_atten']/20.0) * 250.0 * U.mV
-    ac_scale = (refsc / vs_scale)/float(stngs['chY1'])
+    # vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0
+    # refsc = 10**(-stngs['ref_atten']/20.0) * 250.0
+    # ac_scale = (refsc / vs_scale)/float(stngs['chY1'])
+    ac_scale = 10**(-(stngs['ref_atten'] - stngs['sample_atten'])/20.0)/float(stngs['chY1'])
     acbox.select_device()
     acbox.initialize(15)
     acbox.set_voltage("X1", stngs['chX1'])
@@ -224,12 +228,12 @@ def main():
     reg = cxn.registry
     dv = cxn.data_vault
     dc = cxn.dac_adc
-    mag = cxn.ami_430
-    mag.select_device()
+    #mag = cxn.ami_430
+    #mag.select_device()
     tc = cxn.lakeshore_372
     tc.select_device()
-    lck = lockin_select(cxn, cfg['lockin'])
-    lck.select_device()
+    lck = lockin_select(cxn, str(cfg['lockin']))
+    lck.select_device(0)
     acbox = cxn.acbox
     ac_scale = init_acbox(acbox, acbox_settings)
 
@@ -245,11 +249,12 @@ def main():
 
     reg.cd(['Measurements', 'Capacitance'])
     rebalance = balancing_settings['rebalance']
+
+    cb = init_bridge(lck, acbox, cfg)
     if rebalance:
         ch_x = measurement_settings['ch1']
         ch_y = measurement_settings['ch2']
 
-        cb = init_bridge(lck, acbox, cfg)
         v1_balance, v2_balance = function_select(measurement_settings['fixed'])(balancing_settings['p0'], balancing_settings['n0'], meas_parameters['delta_var'], v_fixed)
 
         lck.time_constant(balancing_settings['balance_tc'])
@@ -289,6 +294,7 @@ def main():
     mc = tc.mc()
 
     create_file(dv, cfg, **dict({'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
+    #create_file(dv, cfg, **dict({'vfixed': v_fixed}, **capacitance_params))
 
     #ac_gain_var = int(round(lockin_settings['acgain'] / 6.666))
     tc_var = lockin_settings['tc']
@@ -297,8 +303,9 @@ def main():
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
-    s = lck.sensitivity()
-    time.sleep(.25)
+    # s = lck.sensitivity()
+    # print("sensitivity",{s)
+    # time.sleep(.25)
     t0 = time.time()
 
     pxsize = (meas_parameters['n0_pnts'], meas_parameters['p0_pnts'])
@@ -328,8 +335,8 @@ def main():
         data_x = np.zeros(num_x)
         data_y = np.zeros(num_x)
 
-        vec_x = m[i, :][:, 0]
-        vec_y = m[i, :][:, 1]
+        vec_x = m[i, :][:, 0]*0.5
+        vec_y = m[i, :][:, 1]*0.5
 
         # vec_x = (m[i, :][:, 0] - dacadc_settings['ch1_offset'])
         # vec_y = (m[i, :][:, 1] - dacadc_settings['ch2_offset'])
@@ -337,8 +344,8 @@ def main():
         md = mdn[i, :][:, 0]
         mn = mdn[i, :][:, 1]
 
-        mask = np.logical_and(np.logical_and(vec_x <= X_MAX, vec_x >= X_MIN),
-                              np.logical_and(vec_y <= Y_MAX, vec_y >= Y_MIN))
+        mask = np.logical_and(np.logical_and(vec_x <= X_MAX*.5, vec_x >= X_MIN*.5),
+                              np.logical_and(vec_y <= Y_MAX*.5, vec_y >= Y_MIN*.5))
         if np.any(mask == True):
             start, stop = np.where(mask == True)[0][0], np.where(mask == True)[0][-1]
 
@@ -355,8 +362,10 @@ def main():
             d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
-            data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
-            data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            # data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
+            # data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
 
         d_cap = (c_ * data_x + d_ * data_y) + cs
         d_dis = (d_ * data_x - c_ * data_y) + ds

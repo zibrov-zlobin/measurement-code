@@ -2,20 +2,20 @@
 # Top Gate fixed
 
 file:
-  data_dir: HZS63
-  file_name: Cpen_30T_lines
-  comment: Rox = 325 mK, drain = 0.1V
+  data_dir: TDW072821
+  file_name: Ct_29K_npbridge
+  comment: balanced at n = p = 0. .1 V on bias on the transistor, turning delta down from 0.5 to 0.46
 
 measurement: Cpen
 
 Cpen:
-  v1: V_tg [V]
+  v1: V_bg [V]
   v2: V_sample [V]
   ch1: 0
   ch2: 1
-  read1: 0
-  read2: 1
-  fixed: vb
+  read1: 1
+  read2: 0
+  fixed: vt
 
 Csym:
   v1: V_tg [V]
@@ -29,44 +29,44 @@ Csym:
 lockin: SR830  # Write 'SR830' or '7280'
 
 lockin_settings:
-  tc: 0.10
+  tc: 8
   acgain: 14
-  sensitiviy: 5.0e-3
-  
+  sensitiviy: 15
+
 balancing_settings:
-  balance_tc: 0.1
-  n0: 0.3
-  p0: 0
-  tolerance: 0.005e-3
+  balance_tc: 9
+  n0: -12
+  p0: -4
+  tolerance: 0.01e-3
   ref_ch: 2
   offset:
     - -0.0
     - 0.0
-  iter: 5
-  rebalance : True
+  iter: 10
+  rebalance : False
 
 acbox_settings:
   chX1: 1.0
-  chX2: 1.0
-  chY1: 0.75
-  chY2: 0.75
-  frequency: 33564.41
-  ref_atten: 26
-  sample_atten: 33
+  chX2: 0.7
+  chY1: 0.3
+  chY2: 1.0
+  frequency: 677.77
+  ref_atten: 0
+  sample_atten: 20
 
 dacadc_settings:
   ch1_offset: -0.0024784313
   ch2_offset: -0.0043156862
 
 meas_parameters:
-  n0_pnts: 1050
-  p0_pnts: 1
+  n0_pnts: 330
+  p0_pnts: 80
   n0_rng:
-    - 5.4
-    - 7.1
+    - -4.5
+    - -1
   p0_rng:
-    - -2.0
-    - -2.0
-  delta_var: -0.028
+    - -10
+    - -2
+  delta_var: 0.214285
 
 plot: True

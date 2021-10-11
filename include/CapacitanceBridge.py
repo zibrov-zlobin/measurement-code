@@ -1,6 +1,7 @@
 # Version 0.1
 import numpy as np
 import time
+import labrad
 '''
 capacitance balancing bridge. supporting sr7280 and sr830
 '''
@@ -85,17 +86,17 @@ class LinearBalancingBridge(object):
         if matrix is None:
             self.excite(self.s1)
             m1 = self.measure()
-            print "m1"
-            print m1
+            print("m1")
+            print(m1)
             self.excite(self.s2)
             m2 = self.measure()
             self.M  = self.responseMatrix(self.s1, self.s2, m1, m2)[0]
         else:
             self.M = matrix
 
-        print 'balance:'
-        print 'matrix: '
-        print self.M
+        print('balance:')
+        print('matrix: ')
+        print(self.M)
 
 
         if offset is None:
@@ -103,27 +104,27 @@ class LinearBalancingBridge(object):
         else:
             self.constantOffset = offset
 
-        print 'offset'
-        print self.constantOffset
+        print('offset')
+        print(self.constantOffset)
 
         i = 1
         balanced = False
         while not balanced:
-            print 'iteration'
-            print i
+            print('iteration')
+            print(i)
             self.vb = self.findBalance()
-            print 'vb'
-            print self.vb
+            print('vb')
+            print(self.vb)
             if all(np.abs(self.vb) < 1):
                 self.excite(self.vb)
                 mb = self.measure()
-                print 'mb'
-                print mb
+                print('mb')
+                print(mb)
                 self.constantOffset = self.refineBalance(self.vb, mb)
-                print 'constantoffset'
-                print self.constantOffset
+                print('constantoffset')
+                print(self.constantOffset)
                 i+=1
-                print tol
+                print(tol)
                 if np.linalg.norm(mb) < tol:
                     balanced = True
                     print("Balanced")
@@ -188,7 +189,7 @@ class CapacitanceBridge7280Lockin(CapacitanceBridge):
         super(CapacitanceBridge7280Lockin, self).__init__(*args, **kwargs)
         if time_const is not None:
             self.lck.tc(time_const)
-            time.sleep(self.lck.wait_time())
+            time.sleep(self.lck.wait_time()['s'])
 
     def measure(self):
         lck = self.lck
@@ -196,7 +197,7 @@ class CapacitanceBridge7280Lockin(CapacitanceBridge):
         time.sleep(lck.wait_time())
         x = lck.read_x()
         y = lck.read_y()
-        return np.array(([x], [y]))
+        return np.array(([x['V']], [y['V']]))
 
     def excite(self, s_in):
         ac = self.ac
@@ -221,35 +222,35 @@ class CapacitanceBridgeSR830Lockin(CapacitanceBridge):
         super(CapacitanceBridgeSR830Lockin, self).__init__(*args, **kwargs)
         if time_const is not None:
             self.lck.time_constant(time_const)
-            time.sleep(self.lck.wait_time())
+            time.sleep(self.lck.wait_time()['s'])
 
     def measure(self):
         lck = self.lck
-        wait_time = lck.wait_time()
+        wait_time = lck.wait_time()['s']
         time.sleep(wait_time)
         lck.auto_sensitivity()
         x = lck.x()
         y = lck.y()
-        meas = np.array(([x], [y]))
+        meas = np.array(([x['V']], [y['V']]))
         return meas
 
     def excite(self, s_in):
-        print 'Excite:'
+        print('Excite:')
         ac = self.ac
         phase = self.vec_phase(s_in)
-        print 'phase: '
-        print phase
+        print('phase: ')
+        print(phase)
         ac.set_phase(phase)
         ac.set_voltage(self.channel, np.linalg.norm(s_in))
         return True
 
-    def convertData(self, raw_meas, adc_offset=0, adc_scale=1, dac_offset=0, dac_expand=1):
+    def convertData(self, raw_meas, adc_offset=0, adc_scale=1, dac_offset=0, dac_expand=1,preamp_scale = 1.0):
         x = raw_meas
         fullscale = 10
         lck = self.lck
-        sen = lck.sensitivity()
+        sen = lck.sensitivity()['V']
         # x = ((x/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
-        x = (x - adc_offset)/adc_scale*sen/fullscale
+        x = (x - adc_offset)/adc_scale*sen/fullscale/preamp_scale
         # y = ((y/sen - dac_offset)*dac_expand*fullscale - adc_offset)*adc_scale
         return x
 

@@ -19,10 +19,10 @@ import yaml
 
 RAMP_SPEED = 5.0  # volts per sec
 RAMP_WAIT = 0.000  # seconds
-X_MAX = 12.0
-X_MIN = -16.0
-Y_MAX = 8
-Y_MIN = -12.0
+X_MAX = 10
+X_MIN = -8
+Y_MAX = 4.25
+Y_MIN = 0
 ADC_CONVERSIONTIME = 250
 ADC_AVGSIZE = 1
 
@@ -90,7 +90,7 @@ def lockin_select(cxn, s):
     if s == 'SR830':
         lck = cxn.sr830
     elif s == '7280':
-        print "connecting to 7280"
+        print("connecting to 7280")
         lck = cxn.amatek_7280_lock_in_amplifier
     return lck
 
@@ -98,9 +98,9 @@ def init_acbox(acbox, stngs):
     # vs_scale = 10**(-stngs['sample_atten']/20.0) * 250.0
     # refsc = 10**(-stngs['ref_atten']/20.0) * 250.0
     # ac_scale = (refsc / vs_scale)/float(stngs['chY1'])
-    ac_scale = 10**(-(stngs['ref_atten'] - stngs['sample_atten'])/20.0)/float(stngs['chY1'])
+    ac_scale = 10**(-(stngs['ref_atten'] - stngs['sample_atten'])/20.0)/float(stngs['chY1']/3.0)
     acbox.select_device()
-    acbox.initialize(15)
+    acbox.initialize(6)
     acbox.set_voltage("X1", stngs['chX1'])
     acbox.set_voltage("X2", stngs['chX1'])
     acbox.set_voltage("Y1", stngs['chY1'])
@@ -165,7 +165,7 @@ def tm_tuneup(dc, read_voltage, gate_voltages):
 def create_file(dv, cfg, **kwargs): # try kwarging the vfixed
     try:
         dv.mkdir(cfg['file']['data_dir'])
-        print "Folder {} was created".format(cfg['file']['data_dir'])
+        print("Folder {} was created".format(cfg['file']['data_dir']))
         dv.cd(cfg['file']['data_dir'])
     except Exception:
         dv.cd(cfg['file']['data_dir'])
@@ -182,27 +182,32 @@ def create_file(dv, cfg, **kwargs): # try kwarging the vfixed
                                   cfg['meas_parameters']['p0_pnts']]
                       }
 
+    #dv.new(cfg['file']['file_name']+"-plot", ("i", "j", var_name1, var_name2),
+           #('Cs', 'Ds', 'D', 'N', 'X', 'Y', 't'))
     dv.new(cfg['file']['file_name']+"-plot", ("i", "j", var_name1, var_name2),
-           ('Cs', 'Ds', 'D', 'N', 'X', 'Y', 't'))
+           ('Cs', 'Ds', 'p0', 'n0', 'X', 'Y', 't'))
+
     print("Created {}".format(dv.get_name()))
     dv.add_comment(cfg['file']['comment'])
-    measurement_items = cfg[measurement].items()
-    for parameter in range(len(measurement_items)):
-        dv.add_parameter(measurement_items[parameter][0],measurement_items[parameter][1])
-    dv.add_parameters(cfg['acbox_settings'].items())
-    lockin_items = cfg['lockin_settings'].items()
+    measurement_items = cfg[measurement]
+    for parameter in measurement_items:
+        dv.add_parameter(parameter, measurement_items[parameter])
+    dv.add_parameters(list(cfg['acbox_settings'].items()))
+    lockin_items = list(cfg['lockin_settings'].items())
     for parameter in range(len(lockin_items)):
         dv.add_parameter(lockin_items[parameter][0],lockin_items[parameter][1])
-    balancing_items = cfg['balancing_settings'].items()
+    balancing_items = list(cfg['balancing_settings'].items())
     for parameter in range(len(balancing_items)):
         dv.add_parameter(balancing_items[parameter][0],balancing_items[parameter][1])
     dv.add_parameter('n0_rng', cfg['meas_parameters']['n0_rng'])
     dv.add_parameter('p0_pnts', cfg['meas_parameters']['p0_pnts'])
     dv.add_parameter('n0_pnts', cfg['meas_parameters']['n0_pnts'])
     dv.add_parameter('p0_rng', cfg['meas_parameters']['p0_rng'])
-    dv.add_parameter('extent', tuple(plot_parameters['extent']))
-    dv.add_parameter('pxsize', tuple(plot_parameters['pxsize']))
-    dv.add_parameter('plot', cfg['plot'])
+    dv.add_parameter('delta_var',cfg['meas_parameters']['delta_var'])
+    dv.add_parameter('live_plots',(('n0','p0','Cs'),('n0','p0','Ds')))
+    #dv.add_parameter('extent', tuple(plot_parameters['extent']))
+    #dv.add_parameter('pxsize', tuple(plot_parameters['pxsize']))
+    #dv.add_parameter('plot', cfg['plot'])
 
     if kwargs is not None:
         for key, value in kwargs.items():
@@ -221,29 +226,33 @@ def main():
     dacadc_settings = cfg['dacadc_settings']
     meas_parameters = cfg['meas_parameters']
     delta_var = meas_parameters['delta_var']
-    print delta_var
+    print(delta_var)
 
     # Connections and Instrument Configurations
     cxn = labrad.connect()
     reg = cxn.registry
     dv = cxn.data_vault
-    dc = cxn.dac_adc
+    dc = cxn.dac_adc_24bits
     #mag = cxn.ami_430
     #mag.select_device()
-    tc = cxn.lakeshore_372
-    tc.select_device()
+    #tc = cxn.lakeshore_372
+    #tc.select_device()
     lck = lockin_select(cxn, str(cfg['lockin']))
-    lck.select_device(0)
+    lck.select_device('he-3-cryostat GPIB Bus - GPIB0::10::INSTR')
     acbox = cxn.acbox
     ac_scale = init_acbox(acbox, acbox_settings)
 
-    quad_dc = cxn.dcbox_quad_ad5780
-    quad_dc.select_device()
+    #quad_dc = cxn.dcbox_quad_ad5780
+    #quad_dc.select_device()
 
-    v_fixed = float(quad_dc.get_voltage(1))
+    dc.select_device('he_3_cryostat_serial_server (COM6)')
+    #dc.read()
+    #dc.read()
+    v_fixed = float(dc.read_dac(1))
+    #v_fixed = -0.46
     print("Fixed TM gating voltage is {}".format(v_fixed))
 
-    dc.select_device()
+    dc.select_device('he_3_cryostat_serial_server (COM4)')
     dc.set_conversiontime(measurement_settings['read1'], ADC_CONVERSIONTIME)
     dc.set_conversiontime(measurement_settings['read2'], ADC_CONVERSIONTIME)
 
@@ -258,10 +267,13 @@ def main():
         v1_balance, v2_balance = function_select(measurement_settings['fixed'])(balancing_settings['p0'], balancing_settings['n0'], meas_parameters['delta_var'], v_fixed)
 
         lck.time_constant(balancing_settings['balance_tc'])
-        dc.set_voltage(ch_x, v1_balance)
-        dc.set_voltage(ch_y, v2_balance)
+        #print('balancing voltages')
+        #print(v1_balance)
+        #print(v2_balance)
+        #dc.set_voltage(ch_x, v1_balance)
+        #dc.set_voltage(ch_y, v2_balance)
 
-        print cb.balance()
+        print(cb.balance())
         cs, ds = cb.capacitance(ac_scale)
         print("Via balance: Cs = {}, Ds = {}".format(cs, ds))
         c_, d_ = cb.offBalance(ac_scale)
@@ -290,8 +302,8 @@ def main():
     capacitance_params = {'Capacitance': cs, 'Dissipation': ds,
                           'offbalance c_': c_, 'offbalance d_': d_}
 
-    probe = tc.probe()
-    mc = tc.mc()
+    probe = 0
+    mc = 0
 
     create_file(dv, cfg, **dict({'vfixed': v_fixed, 'temperature_probe': probe, 'temperature_magnet_chamber': mc}, **capacitance_params))
     #create_file(dv, cfg, **dict({'vfixed': v_fixed}, **capacitance_params))
@@ -299,7 +311,7 @@ def main():
     #ac_gain_var = int(round(lockin_settings['acgain'] / 6.666))
     tc_var = lockin_settings['tc']
     sens_var = lockin_settings['sensitiviy']
-    lck.time_constant(tc_var)
+    time_const_val = lck.time_constant(tc_var)['s']
     #lck.set_ac_gain(ac_gain_var)
     lck.sensitivity(sens_var)
 
@@ -312,9 +324,9 @@ def main():
     extent = (meas_parameters['n0_rng'][0], meas_parameters['n0_rng'][1], meas_parameters['p0_rng'][0], meas_parameters['p0_rng'][1])
     num_x = pxsize[0]
     num_y = pxsize[1]
-    print extent, pxsize
+    print(extent, pxsize)
 
-    DELAY_MEAS = 3 * lockin_settings['tc'] * 1e6
+    DELAY_MEAS = 3.4 * time_const_val * 1e6
     est_time = (pxsize[0] * pxsize[1] + pxsize[1]) * DELAY_MEAS * 1e-6 / 60.0
     dt = pxsize[0]*DELAY_MEAS*1e-6/60.0
     print("Will take a total of {} mins. With each line trace taking {} ".format(est_time, dt))
@@ -335,8 +347,8 @@ def main():
         data_x = np.zeros(num_x)
         data_y = np.zeros(num_x)
 
-        vec_x = m[i, :][:, 0]*0.5
-        vec_y = m[i, :][:, 1]*0.5
+        vec_x = m[i, :][:, 0]
+        vec_y = m[i, :][:, 1]
 
         # vec_x = (m[i, :][:, 0] - dacadc_settings['ch1_offset'])
         # vec_y = (m[i, :][:, 1] - dacadc_settings['ch2_offset'])
@@ -344,28 +356,30 @@ def main():
         md = mdn[i, :][:, 0]
         mn = mdn[i, :][:, 1]
 
-        mask = np.logical_and(np.logical_and(vec_x <= X_MAX*.5, vec_x >= X_MIN*.5),
-                              np.logical_and(vec_y <= Y_MAX*.5, vec_y >= Y_MIN*.5))
+        mask = np.logical_and(np.logical_and(np.logical_and(vec_x <= X_MAX, vec_x >= X_MIN),
+                              np.logical_and(vec_y <= Y_MAX, vec_y >= Y_MIN)),np.abs(vec_x - vec_y) <= 9.0)
+        #print(vec_x)
+        #print(vec_y)
         if np.any(mask == True):
             start, stop = np.where(mask == True)[0][0], np.where(mask == True)[0][-1]
 
             num_points = stop - start + 1
             # print(time.strftime("%Y-%m-%d %H:%M:%S"))
             print("{} of {}  --> Ramping. Points: {}".format(i + 1, num_y, num_points))
-            dc.buffer_ramp([dac_ch1, dac_ch2],
+            d_tmp = dc.buffer_ramp([dac_ch1, dac_ch2],
                            [adc_ch1, adc_ch2],
                            [vec_x[start], vec_y[start]],
                            [vec_x[stop], vec_y[stop]],
-                           num_points, DELAY_MEAS, ADC_AVGSIZE)
+                           int(num_points), DELAY_MEAS, ADC_AVGSIZE)
 
-            d_read = dc.serial_poll.future(2, num_points)
-            d_tmp = d_read.result()
+            #d_read = dc.serial_poll.future(2, num_points)
+            #d_tmp = d_read.result()
 
             data_x[start:stop + 1], data_y[start:stop + 1] = d_tmp
             # data_x[start:stop + 1] = (data_x[start:stop + 1] - adc_offset[0]) / adc_slope[0] / 2.5 * s
             # data_y[start:stop + 1] = (data_y[start:stop + 1] - adc_offset[1]) / adc_slope[1] / 2.5 * s
-            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0])
-            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1])
+            data_x[start:stop + 1] = cb.convertData(data_x[start:stop + 1], adc_offset=adc_offset[0], adc_scale=adc_slope[0],preamp_scale=1.0)
+            data_y[start:stop + 1] = cb.convertData(data_y[start:stop + 1], adc_offset=adc_offset[1], adc_scale=adc_slope[1],preamp_scale=1.0)
 
         d_cap = (c_ * data_x + d_ * data_y) + cs
         d_dis = (d_ * data_x - c_ * data_y) + ds
@@ -375,6 +389,9 @@ def main():
         t1 = np.ones(num_x) * time.time() - t0
         totdata = np.array([j, ii, vec_x, vec_y, d_cap, d_dis, md, mn, data_x, data_y, t1])
         dv.add(totdata.T)
+    #dc.set_voltage(dac_ch1, 0.0)
+    #dc.set_voltage(dac_ch2, 0.0)
+
     print("it took {} s. to write data".format(time.time() - t0))
 
 
